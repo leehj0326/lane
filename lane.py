@@ -626,7 +626,7 @@ class NeonGauntletGame:
 
     def get_spawn_intervals(self):
 
-        difficulty_step = self.score // 500
+        difficulty_step = self.score // 1
 
         single_interval = max(
             SINGLE_MIN_INTERVAL,
