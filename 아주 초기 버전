@@ -1,0 +1,210 @@
+import math
+import random
+import tkinter as tk
+
+
+class NeonGauntletGame:
+
+  def __init__(self, root):
+    self.root = root
+    self.root.title("Neon Gauntlet")
+    self.root.resizable(False, False)
+
+    self.canvas = tk.Canvas(root, width=600, height=400, bg="#08080c")
+    self.canvas.pack()
+
+    self.px, self.py = 300, 200
+    self.pr = 10
+    self.player = self.canvas.create_oval(
+        self.px - self.pr,
+        self.py - self.pr,
+        self.px + self.pr,
+        self.py + self.pr,
+        fill="#00ffcc",
+        outline="#ffffff",
+        width=1,
+    )
+
+    self.score = 0
+    self.game_over = False
+    self.game_started = False
+
+    self.keys = {"Up": False, "Down": False, "Left": False, "Right": False}
+    self.dash_cooldown = 0
+    self.is_dashing = False
+    self.dx_dash, self.dy_dash = 0, 0
+
+    self.lasers = []
+    self.laser_timer = 0
+
+    self.ui_score = self.canvas.create_text(
+        30, 20, anchor="w", text="SCORE: 0", fill="#444455", font=("Arial", 11, "bold")
+    )
+    self.ui_dash = self.canvas.create_text(
+        570, 20, anchor="e", text="DASH: READY", fill="#00ffcc", font=("Arial", 11, "bold")
+    )
+    self.ui_msg = self.canvas.create_text(
+        300,
+        200,
+        text="[ ARROWS ]: MOVE   |   [ SPACE ]: DASH\n\nPRESS ANY ARROW TO START",
+        fill="#00ffcc",
+        font=("Arial", 13, "bold"),
+        justify="center",
+    )
+
+    self.root.bind("<KeyPress>", self.on_press)
+    self.root.bind("<KeyRelease>", self.on_release)
+
+  def on_press(self, event):
+    if event.keysym in self.keys:
+      self.keys[event.keysym] = True
+      if not self.game_started:
+        self.game_started = True
+        self.canvas.delete(self.ui_msg)
+        self.canvas.itemconfig(self.ui_score, fill="white")
+        self.update_game()
+    elif event.keysym == "space":
+      if self.game_started and not self.game_over and self.dash_cooldown == 0:
+        # 마지막으로 누른 방향으로 대시
+        mx, my = 0, 0
+        if self.keys["Up"]: my -= 1
+        if self.keys["Down"]: my += 1
+        if self.keys["Left"]: mx -= 1
+        if self.keys["Right"]: mx += 1
+        
+        if mx != 0 or my != 0:
+          length = math.hypot(mx, my)
+          self.dx_dash = (mx / length) * 16
+          self.dy_dash = (my / length) * 16
+          self.is_dashing = True
+          self.dash_cooldown = 45 # 쿨다운 프레임
+          self.canvas.itemconfig(self.ui_dash, text="DASH: RECHARGING", fill="#ff3366")
+    elif event.keysym == "Return" and self.game_over:
+      self.restart()
+
+  def on_release(self, event):
+    if event.keysym in self.keys:
+      self.keys[event.keysym] = False
+
+  def restart(self):
+    self.canvas.delete("all")
+    self.lasers.clear()
+    self.px, self.py = 300, 200
+    self.score = 0
+    self.game_over = False
+    self.dash_cooldown = 0
+    self.is_dashing = False
+    self.laser_timer = 0
+
+    self.player = self.canvas.create_oval(
+        self.px - self.pr, self.py - self.pr, self.px + self.pr, self.py + self.pr,
+        fill="#00ffcc", outline="#ffffff", width=1
+    )
+    self.ui_score = self.canvas.create_text(
+        30, 20, anchor="w", text="SCORE: 0", fill="white", font=("Arial", 11, "bold")
+    )
+    self.ui_dash = self.canvas.create_text(
+        570, 20, anchor="e", text="DASH: READY", fill="#00ffcc", font=("Arial", 11, "bold")
+    )
+    self.update_game()
+
+  def update_game(self):
+    if self.game_over:
+      return
+
+    # 대시 중 처리
+    if self.is_dashing:
+      self.px += self.dx_dash
+      self.py += self.dy_dash
+      self.dx_dash *= 0.8
+      self.dy_dash *= 0.8
+      if abs(self.dx_dash) < 0.5 and abs(self.dy_dash) < 0.5:
+        self.is_dashing = False
+    else:
+      # 일반 이동
+      speed = 3.8
+      vx, vy = 0, 0
+      if self.keys["Up"]: vy -= speed
+      if self.keys["Down"]: vy += speed
+      if self.keys["Left"]: vx -= speed
+      if self.keys["Right"]: vx += speed
+      self.px += vx
+      self.py += vy
+
+    # 벽 충돌 제한
+    if self.px < self.pr: self.px = self.pr
+    if self.px > 600 - self.pr: self.px = 600 - self.pr
+    if self.py < self.pr: self.py = self.pr
+    if self.py > 400 - self.pr: self.py = 400 - self.pr
+
+    # 대시 쿨다운 관리
+    if self.dash_cooldown > 0:
+      self.dash_cooldown -= 1
+      if self.dash_cooldown == 0:
+        self.canvas.itemconfig(self.ui_dash, text="DASH: READY", fill="#00ffcc")
+
+    # 레이저 장애물 스폰
+    self.laser_timer += 1
+    spawn_rate = max(18, 45 - (self.score // 5))
+    if self.laser_timer >= spawn_rate:
+      self.laser_timer = 0
+      side = random.choice(["H", "V"])
+      if side == "H":
+        y_pos = random.randint(30, 370)
+        l_obj = self.canvas.create_line(0, y_pos, 600, y_pos, fill="#ff2255", width=4)
+        self.lasers.append({"shape": l_obj, "type": "H", "pos": y_pos, "warn": True, "timer": 20})
+      else:
+        x_pos = random.randint(30, 570)
+        l_obj = self.canvas.create_line(x_pos, 0, x_pos, 400, fill="#ff2255", width=4)
+        self.lasers.append({"shape": l_obj, "type": "V", "pos": x_pos, "warn": True, "timer": 20})
+
+    # 레이저 업데이트 및 충돌 검사
+    for l in self.lasers[:]:
+      if l["warn"]:
+        l["timer"] -= 1
+        # 경고 깜빡임 효과
+        current_color = self.canvas.itemcget(l["shape"], "fill")
+        next_color = "#331122" if current_color == "#ff2255" else "#ff2255"
+        self.canvas.itemconfig(l["shape"], fill=next_color, width=2)
+        if l["timer"] <= 0:
+          l["warn"] = False
+          self.canvas.itemconfig(l["shape"], fill="#00ffff", width=5) # 활성화 순간 밝은 색
+      else:
+        # 활성 상태 색상 유지
+        self.canvas.itemconfig(l["shape"], fill="#ff3366", width=3)
+        # 충돌 체크 (대시 중에는 무적)
+        if not self.is_dashing:
+          if l["type"] == "H" and abs(self.py - l["pos"]) < self.pr + 1:
+            self.trigger_game_over()
+            return
+          elif l["type"] == "V" and abs(self.px - l["pos"]) < self.pr + 1:
+            self.trigger_game_over()
+            return
+
+    # 일정 시간 지나면 레이저 제거 및 점수 획득
+    if len(self.lasers) > 12:
+      old_l = self.lasers.pop(0)
+      self.canvas.delete(old_l["shape"])
+      self.score += 10
+      self.canvas.itemconfig(self.ui_score, text=f"SCORE: {self.score}")
+
+    # 플레이어 위치 갱신
+    self.canvas.coords(
+        self.player, self.px - self.pr, self.py - self.pr, self.px + self.pr, self.py + self.pr
+    )
+    self.root.after(20, self.update_game)
+
+  def trigger_game_over(self):
+    self.game_over = True
+    self.canvas.itemconfig(self.player, fill="#ff2255")
+    self.canvas.create_text(
+        300, 200,
+        text="GAME OVER\n\nPRESS ENTER TO RETRY",
+        fill="white", font=("Arial", 14, "bold"), justify="center", tags="gameover"
+    )
+
+
+if __name__ == "__main__":
+  root = tk.Tk()
+  app = NeonGauntletGame(root)
+  root.mainloop()
